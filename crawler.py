@@ -1,114 +1,127 @@
-import sqlite3
 import datetime
+from logging import exception
+import random
+import sqlite3
 import requests
 import bs4
-import random
-import re
 
 class Crawler:
     def __init__(self, fileName:str):
-        self._conn = sqlite3.connect(fileName)
-        self._cur = self._conn.cursor()
+        self.conn = sqlite3.connect(fileName)
+        self.cur = self.conn.cursor()
         
 
     def __del__(self):
-        self._conn.commit()
-        self._conn.close()
+        self.conn.commit()
+        self.conn.close()
 
-    def addIndex(self, text):
-        if self.isIndexed==1:
+    def isIndexed(self, url):
+        self.cur.execute(f"SELECT * FROM urllist WHERE url == '{url}'")
+        now = self.cur.fetchall()
+        if now == []:
+            return False
+        else:
+            return True
+
+    def addIndex(self, soup, url):
+
+        if self.isIndexed(url) == False:
+            self.cur.execute(f"""INSERT INTO urllist(url) VALUES ('{url}')""")
+            self.conn.commit()
+            words = []
+            text = self.getTextOnly(soup)
+            words.append(self.separateWords(text))
+            for i in range(0,len(words)):
+                self.cur.execute(f"""INSERT INTO wordList(word) VALUES (?)""",words[i])
+            print('слова получены с',url)
+        else:
+            print('Уже есть в индексе.')
             pass
-        # вызов должен быть с текстом
-        # 
-        text = self.getTextOnly(text)
-        words = [self.separateWords(text)]
 
-        urlId = self.getEntryId("urllist","url")
-        for i in range(words):
-            pass
-        
+    def separateWords(self, text:str) -> list:
+        newList = []
+        newList.append(text.split())
+        return newList
 
-    def getTextOnly(self, text):
-        pass
+    def getTextOnly(self, soup):
+        text = soup.get_text()
+        return text
 
     def addLinkRef(self, urlFrom, urlTo, linkText):
         pass
 
-    def crawl(self, urlList, maxDepth=1):
-        try:
-            for currDepth in range(0,maxDepth):
-                
-                for url in urlList:
-                    html_doc = requests.get(url).text
-                    soup = bs4.BeautifulSoup(html_doc, "html.parser")
-                    a = []
-                    hrefs = []
-                    for a in soup.find_all('a', href=True):
-                        if a['href'].startswith('http'):
-                            hrefs.append(a['href'])
-                            urlList.append(a['href'])
-                            
-                    print(urlList)
-                currDepth=currDepth+1
-                if currDepth == maxDepth:
-                    break
-        except Exception as error:
-            print(error)
-            pass
-                # выделить ссылку 
-                # добавить ссылку в список следующих на обход
-                # извлечь из тэг <a> текст linkText
-                # добавить в таблицу linkbeetwenurl БД ссылку с одной страницы на другую
-
-                # self.addIndex(soup, url)
-            pass
-        pass
-    pass
-
     def initDB(self):
         # cur = self.connection.cursor()
-        self._cur.execute('''
-        CREATE TABLE IF NOT EXISTS URLList (
-            rowId BIGINT PRIMARY KEY,
-            URL TEXT
+        self.cur.execute('''
+        CREATE TABLE IF NOT EXISTS urllist (
+            rowId INTEGER PRIMARY KEY AUTOINCREMENT,
+            url VARCHAR
         )''')
-        self._cur.execute('''
+        self.cur.execute('''
         CREATE TABLE IF NOT EXISTS wordList (
-            rowId BIGINT PRIMARY KEY,
-            word TEXT,
+            rowId INTEGER PRIMARY KEY AUTOINCREMENT,
+            word VARCHAR,
             isFiltred INT
         )''')
-        self._cur.execute('''
+        self.cur.execute('''
         CREATE TABLE IF NOT EXISTS wordLocation (
-            rowId INT PRIMARY KEY,
+            rowId INTEGER PRIMARY KEY AUTOINCREMENT,
             fk_wordId BIGINT,
             fk_URLId BIGINT,
             location BIGINT
         )''')
-        self._cur.execute('''
+        self.cur.execute('''
         CREATE TABLE IF NOT EXISTS linkBetweenURL (
-            rowId BIGINT PRIMARY KEY,
+            rowId INTEGER PRIMARY KEY AUTOINCREMENT,
             fk_FromURL_Id BIGINT,
             fk_ToURL_Id BIGINT
         )''')
-        self._cur.execute('''
+        self.cur.execute('''
         CREATE TABLE IF NOT EXISTS linkWord (
-            rowId BIGINT PRIMARY KEY,
+            rowId INTEGER PRIMARY KEY AUTOINCREMENT,
             fk_wordId BIGINT,
             fk_linkId BIGINT
         )''')
-        self._conn.commit()
+        self.conn.commit()
         print('БД создана')
+
 
     def getEntryId(self, tableName, fileName, value=1):
         pass
 
-    def separateWords(self, text:str) -> str:
-        text = text.split()
-        return text
+    def crawl(self, urlList:list, maxDepth:int):
+        nextUrlSet = set()
+        for currDepth in range(0, maxDepth):
+            print('======= Глубина обхода',currDepth+1,'========')
+            # try:
+            for i in range(0,len(urlList)):
+                try:
+                    url = urlList[i]
+                    try:
+                        html_doc = requests.get(url).text
+                    except Exception as error:
+                        print(error)
+                        continue
+                    soup = bs4.BeautifulSoup(html_doc, 'html.parser')
+                    listUnwantedItems = ['scripts', 'style']
+                    for script in soup.find_all(listUnwantedItems):
+                        script.decompose()
+                    self.addIndex(soup, url)
+                    hrefs = []
+                    for a in soup.find_all('a', href=True):
+                            if a['href'].startswith('http'):
+                                hrefs.append(a['href'])
+                                nextUrlSet.add(a['href'])
+                                urlList = list(nextUrlSet)
+        
+                except IndexError:
+                    continue
+            nextUrlSet.clear()
+        print('====== Completed ======')
+
 
 if __name__ == '__main__':
     crawler = Crawler('database.db')
     crawler.initDB()
-    urlList = ['https://habr.com/ru/post/694932/']
-    crawler.crawl(urlList)
+    urlList = ['https://habr.com/ru/post/694932/'] # Начальная ссылка
+    crawler.crawl(urlList,2) # Точка входа паука.
