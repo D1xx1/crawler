@@ -1,4 +1,3 @@
-from msilib.schema import Property
 import sqlite3
 import datetime
 import requests
@@ -36,20 +35,32 @@ class Crawler:
         pass
 
     def crawl(self, urlList, maxDepth=1):
-        for currDepth in range(0,maxDepth):
-            for url in urlList:
-                html_doc = requests.get(url).text
-                soup = bs4.BeautifulSoup(html_doc, "html.parser")
-                # получить список тэгов <a> с текущей страницы
-                # обработать каждый тэг <a>
-                # проверить наличие атрибута 'href'
-                # убрать пустые ссылки, вырезать якоря из ссылок, и т.д.
+        try:
+            for currDepth in range(0,maxDepth):
+                
+                for url in urlList:
+                    html_doc = requests.get(url).text
+                    soup = bs4.BeautifulSoup(html_doc, "html.parser")
+                    a = []
+                    hrefs = []
+                    for a in soup.find_all('a', href=True):
+                        if a['href'].startswith('http'):
+                            hrefs.append(a['href'])
+                            urlList.append(a['href'])
+                            
+                    print(urlList)
+                currDepth=currDepth+1
+                if currDepth == maxDepth:
+                    break
+        except Exception as error:
+            print(error)
+            pass
                 # выделить ссылку 
                 # добавить ссылку в список следующих на обход
                 # извлечь из тэг <a> текст linkText
                 # добавить в таблицу linkbeetwenurl БД ссылку с одной страницы на другую
 
-                self.addIndex(soup, url)
+                # self.addIndex(soup, url)
             pass
         pass
     pass
@@ -99,3 +110,5 @@ class Crawler:
 if __name__ == '__main__':
     crawler = Crawler('database.db')
     crawler.initDB()
+    urlList = ['https://habr.com/ru/post/694932/']
+    crawler.crawl(urlList)
