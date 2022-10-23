@@ -1,3 +1,4 @@
+from msilib.schema import Property
 import sqlite3
 import datetime
 import requests
@@ -6,13 +7,14 @@ import random
 import re
 
 class Crawler:
-    def __init__(self, fileName):
-        self.connection = sqlite3.connect(fileName)
-        pass
+    def __init__(self, fileName:str):
+        self._conn = sqlite3.connect(fileName)
+        self._cur = self._conn.cursor()
+        
 
     def __del__(self):
-        self.connection.commit()
-        self.connection.close()
+        self._conn.commit()
+        self._conn.close()
 
     def addIndex(self, text):
         if self.isIndexed==1:
@@ -53,7 +55,39 @@ class Crawler:
     pass
 
     def initDB(self):
-        pass
+        # cur = self.connection.cursor()
+        self._cur.execute('''
+        CREATE TABLE IF NOT EXISTS URLList (
+            rowId BIGINT PRIMARY KEY,
+            URL TEXT
+        )''')
+        self._cur.execute('''
+        CREATE TABLE IF NOT EXISTS wordList (
+            rowId BIGINT PRIMARY KEY,
+            word TEXT,
+            isFiltred INT
+        )''')
+        self._cur.execute('''
+        CREATE TABLE IF NOT EXISTS wordLocation (
+            rowId INT PRIMARY KEY,
+            fk_wordId BIGINT,
+            fk_URLId BIGINT,
+            location BIGINT
+        )''')
+        self._cur.execute('''
+        CREATE TABLE IF NOT EXISTS linkBetweenURL (
+            rowId BIGINT PRIMARY KEY,
+            fk_FromURL_Id BIGINT,
+            fk_ToURL_Id BIGINT
+        )''')
+        self._cur.execute('''
+        CREATE TABLE IF NOT EXISTS linkWord (
+            rowId BIGINT PRIMARY KEY,
+            fk_wordId BIGINT,
+            fk_linkId BIGINT
+        )''')
+        self._conn.commit()
+        print('БД создана')
 
     def getEntryId(self, tableName, fileName, value=1):
         pass
@@ -62,4 +96,6 @@ class Crawler:
         text = text.split()
         return text
 
-        
+if __name__ == '__main__':
+    crawler = Crawler('database.db')
+    crawler.initDB()
