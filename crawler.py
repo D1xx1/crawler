@@ -31,34 +31,42 @@ class Crawler:
             nowUrlId = self.cur.fetchone()
             nowUrlId = re.findall('(\d+)', str(nowUrlId))
             text = self.getTextOnly(soup)
-            words = self.separateWords(text)
-            for i in range(0,len(words)):
+            uniqueWords = self.separateWords(text,1) # запрос уникальных слов на текущей странице
+            allWords = self.separateWords(text, 2) # запрос всех сллов на текущей странице
+            for i in range(0,len(uniqueWords)):
                 try:
-                    self.cur.execute(f"""INSERT INTO wordList(word, isFiltred, urlId) VALUES ('{words[i]}','0','{int(nowUrlId[0])}')""")
-                except Exception:
-                    continue
-            self.conn.commit()
-            self.cur.execute(f"""SELECT rowId FROM wordList WHERE urlId == '{int(nowUrlId[0])}'""")
-            newWordsId = self.cur.fetchall()
-            newWordsId = re.findall('(\d+)', str(newWordsId))
-            for i in range(len(newWordsId)):
-                try:
-                    self.cur.execute(f"""INSERT INTO wordLocation(fk_wordId, fk_URLId, location) VALUES ('{int(newWordsId[i])}','{int(nowUrlId[0])}','{i}')""")
+                    # Вставка уникальных слов в БД
+                    self.cur.execute(f"""INSERT INTO wordList(word, isFiltred, urlId) VALUES ('{str(uniqueWords[i])}','0','{int(nowUrlId[0])}')""")
                 except Exception as error:
-                    print(error)
+                    print('ERROR_SECTION_ONE: '+str(error))
+            self.conn.commit()
+
+            for i in range(len(allWords)):
+                try:
+                    self.cur.execute(f"""SELECT rowId FROM wordList WHERE word == '{str(allWords[i])}'""")
+                    wordId = self.cur.fetchone()
+                    self.cur.execute(f"""INSERT INTO wordLocation(fk_wordId, fk_URLId, location) VALUES ('{int(wordId[0])}','{int(nowUrlId[0])}','{i}')""")
+                except Exception as error:
+                    print('ERROR_SECTION_TWO: '+str(error))
                 finally:
                     continue
+
             self.conn.commit()
             print('слова получены с',url)
         else:
             print('Уже есть в индексе.')
             pass
 
-    def separateWords(self, text:str) -> list:
-        newList = text.split()
-        # print(newList)
-        return newList
-
+    def separateWords(self, text:str, parameter:int) -> list:
+        allWords = text.split()
+        uniqueWords = set()
+        for i in range(len(allWords)):
+            uniqueWords.add(allWords[i])
+        if parameter == 1: #возвращает уникальные слова
+            return list(uniqueWords)
+        if parameter == 2:
+            return list(allWords)
+        
     def getTextOnly(self, soup) -> str:
         text = soup.get_text()
         return text
@@ -66,8 +74,11 @@ class Crawler:
     def addLinkRef(self, urlFrom, urlTo):
         self.cur.execute(f"""SELECT rowId FROM urllist WHERE url == '{urlFrom}'""")
         urlFrom = self.cur.fetchone()
-        urlFrom = re.findall('(\d+)',str(urlFrom))
-        self.cur.execute(f"""INSERT INTO linkBetweenURL(fk_FromURL_Id, fk_ToURL_Id) VALUES ('{int(urlFrom[0])}','{urlTo}')""")
+        print(urlTo)
+        self.cur.execute(f"""SELECT rowId FROM urllist WHERE url == '{str(urlTo)}'""")
+        urlTo = self.cur.fetchone()
+        urlTo = re.findall('(\d+)',str(urlTo))
+        self.cur.execute(f"""INSERT INTO linkBetweenURL(fk_FromURL_Id, fk_ToURL_Id) VALUES ('{int(urlFrom[0])}','{int(urlTo[0])}')""")
         self.conn.commit()
 
     def initDB(self):
@@ -130,10 +141,9 @@ class Crawler:
                                     hrefs.append(a['href'])
                                     nextUrlSet.add(a['href'])
                                     urlList = list(nextUrlSet)
-                    self.addLinkRef(url,urlList[i])
+                    
                 except IndexError:
                     continue
-                
             nextUrlSet.clear()
         print('====== Completed ======')
 
