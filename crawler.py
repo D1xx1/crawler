@@ -3,6 +3,7 @@ import random
 import sqlite3
 import requests
 import bs4
+import re
 
 class Crawler:
     def __init__(self, fileName:str):
@@ -26,11 +27,23 @@ class Crawler:
         if self.isIndexed(url) == False:
             self.cur.execute(f"""INSERT INTO urllist(url) VALUES ('{url}')""")
             self.conn.commit()
+            self.cur.execute(f"""SELECT rowId FROM urllist WHERE url == '{url}'""")
+            nowUrlId = self.cur.fetchone()
+            nowUrlId = re.findall('(\d+)', str(nowUrlId))
             text = self.getTextOnly(soup)
             words = self.separateWords(text)
             for i in range(0,len(words)):
                 try:
-                    self.cur.execute(f"""INSERT INTO wordList(word, isFiltred) VALUES ('{words[i]}','0')""")
+                    self.cur.execute(f"""INSERT INTO wordList(word, isFiltred, urlId) VALUES ('{words[i]}','0','{int(nowUrlId[0])}')""")
+                except Exception:
+                    continue
+            self.conn.commit()
+            self.cur.execute(f"""SELECT rowId FROM wordList WHERE urlId == '{int(nowUrlId[0])}'""")
+            newWordsId = self.cur.fetchall()
+            newWordsId = re.findall('(\d+)', str(newWordsId))
+            for i in range(len(newWordsId)):
+                try:
+                    self.cur.execute(f"""INSERT INTO wordLocation(fk_wordId, fk_URLId, location) VALUES ('{int(newWordsId[i])}','{int(nowUrlId[0])}','{i}')""")
                 except Exception as error:
                     print(error)
                 finally:
@@ -43,15 +56,19 @@ class Crawler:
 
     def separateWords(self, text:str) -> list:
         newList = text.split()
-        print(newList)
+        # print(newList)
         return newList
 
-    def getTextOnly(self, soup):
+    def getTextOnly(self, soup) -> str:
         text = soup.get_text()
         return text
 
-    def addLinkRef(self, urlFrom, urlTo, linkText):
-        pass
+    def addLinkRef(self, urlFrom, urlTo):
+        self.cur.execute(f"""SELECT rowId FROM urllist WHERE url == '{urlFrom}'""")
+        urlFrom = self.cur.fetchone()
+        urlFrom = re.findall('(\d+)',str(urlFrom))
+        self.cur.execute(f"""INSERT INTO linkBetweenURL(fk_FromURL_Id, fk_ToURL_Id) VALUES ('{int(urlFrom[0])}','{urlTo}')""")
+        self.conn.commit()
 
     def initDB(self):
         self.cur.execute('''
@@ -63,33 +80,31 @@ class Crawler:
         CREATE TABLE IF NOT EXISTS wordList (
             rowId INTEGER PRIMARY KEY AUTOINCREMENT,
             word VARCHAR,
-            isFiltred INT
+            isFiltred INTEGER,
+            urlId INTEGER
         )''')
         self.cur.execute('''
         CREATE TABLE IF NOT EXISTS wordLocation (
             rowId INTEGER PRIMARY KEY AUTOINCREMENT,
-            fk_wordId BIGINT,
-            fk_URLId BIGINT,
-            location BIGINT
+            fk_wordId INTEGER,
+            fk_URLId INTEGER,
+            location INTEGER
         )''')
         self.cur.execute('''
         CREATE TABLE IF NOT EXISTS linkBetweenURL (
             rowId INTEGER PRIMARY KEY AUTOINCREMENT,
-            fk_FromURL_Id BIGINT,
-            fk_ToURL_Id BIGINT
+            fk_FromURL_Id INTEGER,
+            fk_ToURL_Id INTEGER
         )''')
         self.cur.execute('''
         CREATE TABLE IF NOT EXISTS linkWord (
             rowId INTEGER PRIMARY KEY AUTOINCREMENT,
-            fk_wordId BIGINT,
-            fk_linkId BIGINT
+            fk_wordId INTEGER,
+            fk_linkId INTEGER
         )''')
         self.conn.commit()
         print('БД создана')
 
-
-    def getEntryId(self, tableName, fileName, value=1):
-        pass
 
     def crawl(self, urlList:list, maxDepth:int):
         nextUrlSet = set()
@@ -111,11 +126,14 @@ class Crawler:
                     hrefs = list()
                     for a in soup.find_all('a', href=True):
                             if a['href'].startswith('http'):
-                                hrefs.append(a['href'])
-                                nextUrlSet.add(a['href'])
-                                urlList = list(nextUrlSet)
+                                if not a['href'].startswith('https://twitter'):
+                                    hrefs.append(a['href'])
+                                    nextUrlSet.add(a['href'])
+                                    urlList = list(nextUrlSet)
+                    self.addLinkRef(url,urlList[i])
                 except IndexError:
                     continue
+                
             nextUrlSet.clear()
         print('====== Completed ======')
 
