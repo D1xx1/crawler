@@ -180,7 +180,7 @@ class Crawler:
 
 
 if __name__ == '__main__':
-    crawler = Crawler('newdatabase1.db')
+    crawler = Crawler('newdatabase2.db')
     crawler.initDB()
     urlList = ['https://habr.com/ru/post/694932/']
     # urlList = ['https://habr.com/ru/post/694932/','https://dzen.ru/a/YB5JMdlqGlC4sg5_','https://www.rbc.ru/rbcfreenews/63170ad29a7947a4bf1c302a'] # Начальная ссылка
